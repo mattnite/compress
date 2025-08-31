@@ -50,7 +50,7 @@ pub const Container = enum {
         WrongZlibChecksum,
     };
 
-    pub fn writeHeader(comptime wrap: Container, writer: anytype) !void {
+    pub fn writeHeader(comptime wrap: Container, writer: *std.Io.Writer) !void {
         switch (wrap) {
             .gzip => {
                 // GZIP 10 byte header (https://datatracker.ietf.org/doc/html/rfc1952#page-5):
@@ -82,7 +82,7 @@ pub const Container = enum {
         }
     }
 
-    pub fn writeFooter(comptime wrap: Container, hasher: *Hasher(wrap), writer: anytype) !void {
+    pub fn writeFooter(comptime wrap: Container, hasher: *Hasher(wrap), writer: *std.Io.Writer) !void {
         var bits: [4]u8 = undefined;
         switch (wrap) {
             .gzip => {
@@ -108,7 +108,7 @@ pub const Container = enum {
         }
     }
 
-    pub fn parseHeader(comptime wrap: Container, reader: anytype) !void {
+    pub fn parseHeader(comptime wrap: Container, reader: *std.Io.Reader) !void {
         switch (wrap) {
             .gzip => try parseGzipHeader(reader),
             .zlib => try parseZlibHeader(reader),
@@ -116,7 +116,7 @@ pub const Container = enum {
         }
     }
 
-    fn parseGzipHeader(reader: anytype) !void {
+    fn parseGzipHeader(reader: *std.Io.Reader) !void {
         const magic1 = try reader.read(u8);
         const magic2 = try reader.read(u8);
         const method = try reader.read(u8);
@@ -142,7 +142,7 @@ pub const Container = enum {
         }
     }
 
-    fn parseZlibHeader(reader: anytype) !void {
+    fn parseZlibHeader(reader: *std.Io.Reader) !void {
         const cm = try reader.read(u4);
         const cinfo = try reader.read(u4);
         _ = try reader.read(u8);
@@ -151,7 +151,7 @@ pub const Container = enum {
         }
     }
 
-    pub fn parseFooter(comptime wrap: Container, hasher: *Hasher(wrap), reader: anytype) !void {
+    pub fn parseFooter(comptime wrap: Container, hasher: *Hasher(wrap), reader: *std.Io.Reader) !void {
         switch (wrap) {
             .gzip => {
                 try reader.fill(0);

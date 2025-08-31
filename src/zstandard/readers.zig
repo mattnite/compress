@@ -77,6 +77,6 @@ pub fn BitReader(comptime Reader: type) type {
     };
 }
 
-pub fn bitReader(reader: anytype) BitReader(@TypeOf(reader)) {
+pub fn bitReader(reader: *std.Io.Reader) BitReader(@TypeOf(reader)) {
     return .{ .underlying = std.io.bitReader(.little, reader) };
 }

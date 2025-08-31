@@ -12,13 +12,13 @@ const codegen_order = @import("consts.zig").huffman.codegen_order;
 
 /// Decompresses deflate bit stream `reader` and writes uncompressed data to the
 /// `writer` stream.
-pub fn decompress(comptime container: Container, reader: anytype, writer: anytype) !void {
+pub fn decompress(comptime container: Container, reader: *std.Io.Reader, writer: *std.Io.Writer) !void {
     var d = decompressor(container, reader);
     try d.decompress(writer);
 }
 
 /// Inflate decompressor for the reader type.
-pub fn decompressor(comptime container: Container, reader: anytype) Decompressor(container, @TypeOf(reader)) {
+pub fn decompressor(comptime container: Container, reader: *std.Io.Reader) Decompressor(container, @TypeOf(reader)) {
     return Decompressor(container, @TypeOf(reader)).init(reader);
 }
 
@@ -299,7 +299,7 @@ pub fn Inflate(comptime container: Container, comptime LookaheadType: type, comp
 
         // Reads all compressed data from the internal reader and outputs plain
         // (uncompressed) data to the provided writer.
-        pub fn decompress(self: *Self, writer: anytype) !void {
+        pub fn decompress(self: *Self, writer: *std.Io.Writer) !void {
             while (try self.next()) |buf| {
                 try writer.writeAll(buf);
             }

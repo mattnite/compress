@@ -8,14 +8,14 @@ pub const decode = @import("lzma/decode.zig");
 
 pub fn decompress(
     allocator: Allocator,
-    reader: anytype,
+    reader: *std.Io.Reader,
 ) !Decompress(@TypeOf(reader)) {
     return decompressWithOptions(allocator, reader, .{});
 }
 
 pub fn decompressWithOptions(
     allocator: Allocator,
-    reader: anytype,
+    reader: *std.Io.Reader,
     options: decode.Options,
 ) !Decompress(@TypeOf(reader)) {
     const params = try decode.Params.readHeader(reader, options);

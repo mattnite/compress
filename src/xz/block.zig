@@ -16,7 +16,7 @@ const DecodeError = error{
     Overflow,
 };
 
-pub fn decoder(allocator: Allocator, reader: anytype, check: xz.Check) !Decoder(@TypeOf(reader)) {
+pub fn decoder(allocator: Allocator, reader: *std.Io.Reader, check: xz.Check) !Decoder(@TypeOf(reader)) {
     return Decoder(@TypeOf(reader)).init(allocator, reader, check);
 }
 

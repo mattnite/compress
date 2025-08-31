@@ -8,7 +8,7 @@ const consts = @import("consts.zig").huffman;
 const Token = @import("Token.zig");
 const BitWriter = @import("bit_writer.zig").BitWriter;
 
-pub fn blockWriter(writer: anytype) BlockWriter(@TypeOf(writer)) {
+pub fn blockWriter(writer: *std.Io.Writer) BlockWriter(@TypeOf(writer)) {
     return BlockWriter(@TypeOf(writer)).init(writer);
 }
 

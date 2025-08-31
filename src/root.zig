@@ -31,7 +31,7 @@ pub fn HashedReader(ReaderType: type, HasherType: type) type {
 }
 
 pub fn hashedReader(
-    reader: anytype,
+    reader: *std.Io.Reader,
     hasher: anytype,
 ) HashedReader(@TypeOf(reader), @TypeOf(hasher)) {
     return .{ .child_reader = reader, .hasher = hasher };
@@ -58,7 +58,7 @@ pub fn HashedWriter(WriterType: type, HasherType: type) type {
 }
 
 pub fn hashedWriter(
-    writer: anytype,
+    writer: *std.Io.Writer,
     hasher: anytype,
 ) HashedWriter(@TypeOf(writer), @TypeOf(hasher)) {
     return .{ .child_writer = writer, .hasher = hasher };

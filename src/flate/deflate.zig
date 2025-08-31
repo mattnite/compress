@@ -54,14 +54,14 @@ const LevelArgs = struct {
 };
 
 /// Compress plain data from reader into compressed stream written to writer.
-pub fn compress(comptime container: Container, reader: anytype, writer: anytype, options: Options) !void {
+pub fn compress(comptime container: Container, reader: *std.Io.Reader, writer: *std.Io.Writer, options: Options) !void {
     var c = try compressor(container, writer, options);
     try c.compress(reader);
     try c.finish();
 }
 
 /// Create compressor for writer type.
-pub fn compressor(comptime container: Container, writer: anytype, options: Options) !Compressor(
+pub fn compressor(comptime container: Container, writer: *std.Io.Writer, options: Options) !Compressor(
     container,
     @TypeOf(writer),
 ) {
@@ -302,7 +302,7 @@ fn Deflate(comptime container: Container, comptime WriterType: type, comptime Bl
         /// It is up to the caller to call flush (if needed) or finish (required)
         /// when is need to output any pending data or complete stream.
         ///
-        pub fn compress(self: *Self, reader: anytype) !void {
+        pub fn compress(self: *Self, reader: *std.Io.Reader) !void {
             while (true) {
                 // Fill window from reader
                 const buf = self.win.writable();
@@ -400,7 +400,7 @@ const Tokens = struct {
 /// only performs Huffman entropy encoding. Results in faster compression, much
 /// less memory requirements during compression but bigger compressed sizes.
 pub const huffman = struct {
-    pub fn compress(comptime container: Container, reader: anytype, writer: anytype) !void {
+    pub fn compress(comptime container: Container, reader: *std.Io.Reader, writer: *std.Io.Writer) !void {
         var c = try huffman.compressor(container, writer);
         try c.compress(reader);
         try c.finish();
@@ -410,7 +410,7 @@ pub const huffman = struct {
         return SimpleCompressor(.huffman, container, WriterType);
     }
 
-    pub fn compressor(comptime container: Container, writer: anytype) !huffman.Compressor(container, @TypeOf(writer)) {
+    pub fn compressor(comptime container: Container, writer: *std.Io.Writer) !huffman.Compressor(container, @TypeOf(writer)) {
         return try huffman.Compressor(container, @TypeOf(writer)).init(writer);
     }
 };
@@ -419,7 +419,7 @@ pub const huffman = struct {
 /// store blocks. That adds 9 bytes of header for each block. Max stored block
 /// size is 64K. Block is emitted when flush is called on on finish.
 pub const store = struct {
-    pub fn compress(comptime container: Container, reader: anytype, writer: anytype) !void {
+    pub fn compress(comptime container: Container, reader: *std.Io.Reader, writer: *std.Io.Writer) !void {
         var c = try store.compressor(container, writer);
         try c.compress(reader);
         try c.finish();
@@ -429,7 +429,7 @@ pub const store = struct {
         return SimpleCompressor(.store, container, WriterType);
     }
 
-    pub fn compressor(comptime container: Container, writer: anytype) !store.Compressor(container, @TypeOf(writer)) {
+    pub fn compressor(comptime container: Container, writer: *std.Io.Writer) !store.Compressor(container, @TypeOf(writer)) {
         return try store.Compressor(container, @TypeOf(writer)).init(writer);
     }
 };
@@ -442,7 +442,7 @@ const SimpleCompressorKind = enum {
 fn simpleCompressor(
     comptime kind: SimpleCompressorKind,
     comptime container: Container,
-    writer: anytype,
+    writer: *std.Io.Writer,
 ) !SimpleCompressor(kind, container, @TypeOf(writer)) {
     return try SimpleCompressor(kind, container, @TypeOf(writer)).init(writer);
 }
@@ -496,7 +496,7 @@ fn SimpleCompressor(
         // Writes all data from the input reader of uncompressed data.
         // It is up to the caller to call flush or finish if there is need to
         // output compressed blocks.
-        pub fn compress(self: *Self, reader: anytype) !void {
+        pub fn compress(self: *Self, reader: *std.Io.Reader) !void {
             while (true) {
                 // read from rdr into buffer
                 const buf = self.buffer[self.wp..];

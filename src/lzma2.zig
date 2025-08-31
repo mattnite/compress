@@ -6,8 +6,8 @@ pub const decode = @import("lzma2/decode.zig");
 
 pub fn decompress(
     allocator: Allocator,
-    reader: anytype,
-    writer: anytype,
+    reader: *std.Io.Reader,
+    writer: *std.Io.Writer,
 ) !void {
     var decoder = try decode.Decoder.init(allocator);
     defer decoder.deinit(allocator);

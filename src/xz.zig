@@ -11,7 +11,7 @@ pub const Check = enum(u4) {
     _,
 };
 
-fn readStreamFlags(reader: anytype, check: *Check) !void {
+fn readStreamFlags(reader: *std.Io.Reader, check: *Check) !void {
     var bit_reader = std.io.bitReader(.little, reader);
 
     const reserved1 = try bit_reader.readBitsNoEof(u8, 8);
@@ -25,7 +25,7 @@ fn readStreamFlags(reader: anytype, check: *Check) !void {
         return error.CorruptInput;
 }
 
-pub fn decompress(allocator: Allocator, reader: anytype) !Decompress(@TypeOf(reader)) {
+pub fn decompress(allocator: Allocator, reader: *std.Io.Reader) !Decompress(@TypeOf(reader)) {
     return Decompress(@TypeOf(reader)).init(allocator, reader);
 }
 

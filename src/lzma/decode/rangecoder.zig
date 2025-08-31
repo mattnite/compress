@@ -5,7 +5,7 @@ pub const RangeDecoder = struct {
     range: u32,
     code: u32,
 
-    pub fn init(reader: anytype) !RangeDecoder {
+    pub fn init(reader: *std.Io.Reader) !RangeDecoder {
         const reserved = try reader.readByte();
         if (reserved != 0) {
             return error.CorruptInput;
@@ -35,14 +35,14 @@ pub const RangeDecoder = struct {
         return self.code == 0;
     }
 
-    inline fn normalize(self: *RangeDecoder, reader: anytype) !void {
+    inline fn normalize(self: *RangeDecoder, reader: *std.Io.Reader) !void {
         if (self.range < 0x0100_0000) {
             self.range <<= 8;
             self.code = (self.code << 8) ^ @as(u32, try reader.readByte());
         }
     }
 
-    inline fn getBit(self: *RangeDecoder, reader: anytype) !bool {
+    inline fn getBit(self: *RangeDecoder, reader: *std.Io.Reader) !bool {
         self.range >>= 1;
 
         const bit = self.code >= self.range;
@@ -53,7 +53,7 @@ pub const RangeDecoder = struct {
         return bit;
     }
 
-    pub fn get(self: *RangeDecoder, reader: anytype, count: usize) !u32 {
+    pub fn get(self: *RangeDecoder, reader: *std.Io.Reader, count: usize) !u32 {
         var result: u32 = 0;
         var i: usize = 0;
         while (i < count) : (i += 1)
@@ -61,7 +61,7 @@ pub const RangeDecoder = struct {
         return result;
     }
 
-    pub inline fn decodeBit(self: *RangeDecoder, reader: anytype, prob: *u16, update: bool) !bool {
+    pub inline fn decodeBit(self: *RangeDecoder, reader: *std.Io.Reader, prob: *u16, update: bool) !bool {
         const bound = (self.range >> 11) * prob.*;
 
         if (self.code < bound) {
@@ -84,7 +84,7 @@ pub const RangeDecoder = struct {
 
     fn parseBitTree(
         self: *RangeDecoder,
-        reader: anytype,
+        reader: *std.Io.Reader,
         num_bits: u5,
         probs: []u16,
         update: bool,
@@ -100,7 +100,7 @@ pub const RangeDecoder = struct {
 
     pub fn parseReverseBitTree(
         self: *RangeDecoder,
-        reader: anytype,
+        reader: *std.Io.Reader,
         num_bits: u5,
         probs: []u16,
         offset: usize,
@@ -126,7 +126,7 @@ pub fn BitTree(comptime num_bits: usize) type {
 
         pub fn parse(
             self: *Self,
-            reader: anytype,
+            reader: *std.Io.Reader,
             decoder: *RangeDecoder,
             update: bool,
         ) !u32 {
@@ -135,7 +135,7 @@ pub fn BitTree(comptime num_bits: usize) type {
 
         pub fn parseReverse(
             self: *Self,
-            reader: anytype,
+            reader: *std.Io.Reader,
             decoder: *RangeDecoder,
             update: bool,
         ) !u32 {
@@ -157,7 +157,7 @@ pub const LenDecoder = struct {
 
     pub fn decode(
         self: *LenDecoder,
-        reader: anytype,
+        reader: *std.Io.Reader,
         decoder: *RangeDecoder,
         pos_state: usize,
         update: bool,
