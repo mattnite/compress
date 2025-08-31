@@ -1,6 +1,7 @@
 const std = @import("std");
 const io = std.io;
 const assert = std.debug.assert;
+const ArrayListManaged = std.array_list.Managed;
 
 const hc = @import("huffman_encoder.zig");
 const consts = @import("consts.zig").huffman;
@@ -683,7 +684,7 @@ fn testBlock(comptime tc: TestCase, comptime tfn: TestFn) !void {
 
 // Uses writer function `tfn` to write `tokens`, tests that we got `want` as output.
 fn testWriteBlock(comptime tfn: TestFn, input: ?[]const u8, want: []const u8, tokens: []const Token) !void {
-    var buf = ArrayList(u8).init(testing.allocator);
+    var buf = ArrayListManaged(u8).init(testing.allocator);
     var bw = blockWriter(buf.writer());
     try tfn.write(&bw, tokens, input, false);
     var got = buf.items;
@@ -692,7 +693,7 @@ fn testWriteBlock(comptime tfn: TestFn, input: ?[]const u8, want: []const u8, to
     //
     // Test if the writer produces the same output after reset.
     buf.deinit();
-    buf = ArrayList(u8).init(testing.allocator);
+    buf = ArrayListManaged(u8).init(testing.allocator);
     defer buf.deinit();
     bw.setWriter(buf.writer());
 

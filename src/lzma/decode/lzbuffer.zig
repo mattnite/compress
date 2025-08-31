@@ -2,12 +2,12 @@ const std = @import("std");
 const math = std.math;
 const mem = std.mem;
 const Allocator = std.mem.Allocator;
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const ArrayList = std.ArrayList;
 
 /// An accumulating buffer for LZ sequences
 pub const LzAccumBuffer = struct {
     /// Buffer
-    buf: ArrayListUnmanaged(u8),
+    buf: ArrayList(u8),
 
     /// Buffer memory limit
     memlimit: usize,
@@ -110,7 +110,7 @@ pub const LzAccumBuffer = struct {
 /// A circular buffer for LZ sequences
 pub const LzCircularBuffer = struct {
     /// Circular buffer
-    buf: ArrayListUnmanaged(u8),
+    buf: ArrayList(u8),
 
     /// Length of the buffer
     dict_size: usize,

@@ -178,7 +178,11 @@ pub const Container = enum {
         };
 
         return struct {
-            hasher: HasherType = HasherType.init(),
+            hasher: HasherType = switch (wrap) {
+                .zlib => .{},
+                .gzip => .init(),
+                .raw => .init(),
+            },
             bytes: usize = 0,
 
             const Self = @This();
@@ -194,10 +198,11 @@ pub const Container = enum {
             }
 
             pub fn chksum(self: *Self) u32 {
-                switch (wrap) {
+                return switch (wrap) {
                     .raw => return 0,
-                    else => return self.hasher.final(),
-                }
+                    .zlib => self.hasher.adler,
+                    .gzip => self.hasher.crc,
+                };
             }
 
             pub fn bytesRead(self: *Self) u32 {

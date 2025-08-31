@@ -4,6 +4,7 @@ const math = std.math;
 const mem = std.mem;
 const sort = std.sort;
 const testing = std.testing;
+const ArrayListManaged = std.array_list.Managed;
 
 const consts = @import("consts.zig").huffman;
 
@@ -483,7 +484,7 @@ test bitReverse {
 }
 
 test "fixedLiteralEncoder codes" {
-    var al = std.ArrayList(u8).init(testing.allocator);
+    var al = ArrayListManaged(u8).init(testing.allocator);
     defer al.deinit();
     var bw = std.io.bitWriter(.little, al.writer());
 

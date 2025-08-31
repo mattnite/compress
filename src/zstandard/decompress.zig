@@ -2,6 +2,7 @@ const std = @import("std");
 const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
 const RingBuffer = std.RingBuffer;
+const ArrayListManaged = std.array_list.Managed;
 
 const types = @import("types.zig");
 const frame = types.frame;
@@ -127,7 +128,7 @@ pub fn decodeAlloc(
     verify_checksum: bool,
     window_size_max: usize,
 ) error{ DictionaryIdFlagUnsupported, MalformedFrame, OutOfMemory }![]u8 {
-    var result = std.ArrayList(u8).init(allocator);
+    var result = ArrayListManaged(u8).init(allocator);
     errdefer result.deinit();
 
     var read_count: usize = 0;
@@ -228,7 +229,7 @@ pub fn decodeFrame(
 ///     size greater than `src.len`
 pub fn decodeFrameArrayList(
     allocator: Allocator,
-    dest: *std.ArrayList(u8),
+    dest: *ArrayListManaged(u8),
     src: []const u8,
     verify_checksum: bool,
     window_size_max: usize,
@@ -437,7 +438,7 @@ pub const FrameContext = struct {
 ///     not equal the size of decompressed data
 pub fn decodeZstandardFrameArrayList(
     allocator: Allocator,
-    dest: *std.ArrayList(u8),
+    dest: *ArrayListManaged(u8),
     src: []const u8,
     verify_checksum: bool,
     window_size_max: usize,
@@ -464,7 +465,7 @@ pub fn decodeZstandardFrameArrayList(
 
 pub fn decodeZstandardFrameBlocksArrayList(
     allocator: Allocator,
-    dest: *std.ArrayList(u8),
+    dest: *ArrayListManaged(u8),
     src: []const u8,
     frame_context: *FrameContext,
 ) (error{OutOfMemory} || FrameError)!usize {

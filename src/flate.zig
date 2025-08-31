@@ -78,6 +78,7 @@ const testing = std.testing;
 const fixedBufferStream = std.io.fixedBufferStream;
 const print = std.debug.print;
 const builtin = @import("builtin");
+const ArrayListManaged = std.array_list.Managed;
 
 test {
     _ = deflate;
@@ -243,7 +244,7 @@ test "compress/decompress" {
 
 fn testDecompress(comptime container: Container, compressed: []const u8, expected_plain: []const u8) !void {
     var in = fixedBufferStream(compressed);
-    var out = std.ArrayList(u8).init(testing.allocator);
+    var out = ArrayListManaged(u8).init(testing.allocator);
     defer out.deinit();
 
     try inflate.decompress(container, in.reader(), out.writer());

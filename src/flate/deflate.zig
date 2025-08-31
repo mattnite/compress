@@ -4,6 +4,7 @@ const assert = std.debug.assert;
 const testing = std.testing;
 const expect = testing.expect;
 const print = std.debug.print;
+const ArrayListManaged = std.array_list.Managed;
 
 const Token = @import("Token.zig");
 const consts = @import("consts.zig");
@@ -646,7 +647,7 @@ test "file tokenization" {
             var original = io.fixedBufferStream(data);
 
             // buffer for decompressed data
-            var al = std.ArrayList(u8).init(testing.allocator);
+            var al = ArrayListManaged(u8).init(testing.allocator);
             defer al.deinit();
             const writer = al.writer();
 
@@ -725,7 +726,7 @@ test "store simple compressor" {
     };
 
     var fbs = std.io.fixedBufferStream(data);
-    var al = std.ArrayList(u8).init(testing.allocator);
+    var al = ArrayListManaged(u8).init(testing.allocator);
     defer al.deinit();
 
     var cmp = try store.compressor(.raw, al.writer());

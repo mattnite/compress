@@ -9,12 +9,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const compress_tests = b.addTest(.{
+    const tests = b.addTest(.{
         .root_module = compress,
     });
 
-    const compress_tests_run = b.addRunArtifact(compress_tests);
-
+    const run_tests = b.addRunArtifact(tests);
     const test_step = b.step("test", "Unit test compression library");
-    test_step.dependOn(&compress_tests_run.step);
+    test_step.dependOn(&run_tests.step);
 }
