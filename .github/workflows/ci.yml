@@ -6,9 +6,6 @@ on:
     branches: [main]
   workflow_dispatch:
 
-env:
-  ZIG_VERSION: 0.15.1
-
 jobs:
   build-and-test:
     name: Build and Test
@@ -22,7 +19,7 @@ jobs:
       - name: Setup Zig
         uses: mlugg/setup-zig@v2
         with:
-          version: 0.14.1
+          version: 0.15.1
       - name: Build
         run: zig build
       - name: Test
