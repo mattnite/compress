@@ -65,3 +65,7 @@ pub const store = struct {
         return deflate.store.compressor(.gzip, writer);
     }
 };
+
+test {
+    _ = deflate;
+}
