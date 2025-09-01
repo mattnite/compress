@@ -2,17 +2,12 @@ const std = @import("std");
 const assert = std.debug.assert;
 const testing = std.testing;
 
-pub fn bitReader(comptime T: type, reader: anytype) BitReader(T, @TypeOf(reader)) {
-    return BitReader(T, @TypeOf(reader)).init(reader);
+pub fn bitReader(comptime T: type, reader: *std.Io.Reader) BitReader(T) {
+    return BitReader(T).init(reader);
 }
 
-pub fn BitReader64(comptime ReaderType: type) type {
-    return BitReader(u64, ReaderType);
-}
-
-pub fn BitReader32(comptime ReaderType: type) type {
-    return BitReader(u32, ReaderType);
-}
+pub const BitReader64 = BitReader(u64);
+pub const BitReader32 = BitReader(u32);
 
 /// Bit reader used during inflate (decompression). Has internal buffer of 64
 /// bits which shifts right after bits are consumed. Uses forward_reader to fill
@@ -23,14 +18,14 @@ pub fn BitReader32(comptime ReaderType: type) type {
 /// fill buffer from forward_reader by calling fill in advance and readF with
 /// buffered flag set.
 ///
-pub fn BitReader(comptime T: type, comptime ReaderType: type) type {
+pub fn BitReader(comptime T: type) type {
     assert(T == u32 or T == u64);
     const t_bytes: usize = @sizeOf(T);
     const Tshift = if (T == u64) u6 else u5;
 
     return struct {
         // Underlying reader used for filling internal bits buffer
-        forward_reader: ReaderType = undefined,
+        forward_reader: *std.Io.Reader,
         // Internal buffer of 64 bits
         bits: T = 0,
         // Number of bits in the buffer
@@ -38,9 +33,9 @@ pub fn BitReader(comptime T: type, comptime ReaderType: type) type {
 
         const Self = @This();
 
-        pub const Error = ReaderType.Error || error{EndOfStream};
+        pub const Error = std.Io.Reader.Error || error{EndOfStream};
 
-        pub fn init(rdr: ReaderType) Self {
+        pub fn init(rdr: *std.Io.Reader) Self {
             var self = Self{ .forward_reader = rdr };
             self.fill(1) catch {};
             return self;
@@ -67,7 +62,7 @@ pub fn BitReader(comptime T: type, comptime ReaderType: type) type {
                 (self.nbits >> 3); // 0 for 0-7, 1 for 8-16, ... same as / 8
 
             var buf: [t_bytes]u8 = [_]u8{0} ** t_bytes;
-            const bytes_read = self.forward_reader.readAll(buf[0..empty_bytes]) catch 0;
+            const bytes_read = self.forward_reader.readSliceShort(buf[0..empty_bytes]) catch 0;
             if (bytes_read > 0) {
                 const u: T = std.mem.readInt(T, buf[0..t_bytes], .little);
                 self.bits |= u << @as(Tshift, @intCast(self.nbits));
@@ -90,7 +85,7 @@ pub fn BitReader(comptime T: type, comptime ReaderType: type) type {
                 n += 1;
             }
             // Then use forward reader for all other bytes.
-            try self.forward_reader.readNoEof(buf[n..]);
+            try self.forward_reader.readSliceAll(buf[n..]);
         }
 
         pub const flag = struct {
@@ -241,9 +236,9 @@ pub fn BitReader(comptime T: type, comptime ReaderType: type) type {
 }
 
 test "readF" {
-    var fbs = std.io.fixedBufferStream(&[_]u8{ 0xf3, 0x48, 0xcd, 0xc9, 0x00, 0x00 });
-    var br = bitReader(u64, fbs.reader());
-    const F = BitReader64(@TypeOf(fbs.reader())).flag;
+    var in: std.Io.Reader = .fixed(&[_]u8{ 0xf3, 0x48, 0xcd, 0xc9, 0x00, 0x00 });
+    var br = bitReader(u64, &in);
+    const F = BitReader64.flag;
 
     try testing.expectEqual(@as(u8, 48), br.nbits);
     try testing.expectEqual(@as(u64, 0xc9cd48f3), br.bits);
@@ -283,9 +278,9 @@ test "read block type 1 data" {
             0x0c, 0x01, 0x02, 0x03, //
             0xaa, 0xbb, 0xcc, 0xdd,
         };
-        var fbs = std.io.fixedBufferStream(&data);
-        var br = bitReader(T, fbs.reader());
-        const F = BitReader(T, @TypeOf(fbs.reader())).flag;
+        var in: std.Io.Reader = .fixed(&data);
+        var br = bitReader(T, &in);
+        const F = BitReader(T).flag;
 
         try testing.expectEqual(@as(u1, 1), try br.readF(u1, 0)); // bfinal
         try testing.expectEqual(@as(u2, 1), try br.readF(u2, 0)); // block_type
@@ -306,8 +301,8 @@ test "shift/fill" {
         0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
         0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
     };
-    var fbs = std.io.fixedBufferStream(&data);
-    var br = bitReader(u64, fbs.reader());
+    var in: std.Io.Reader = .fixed(&data);
+    var br = bitReader(u64, &in);
 
     try testing.expectEqual(@as(u64, 0x08_07_06_05_04_03_02_01), br.bits);
     try br.shift(8);
@@ -332,8 +327,8 @@ test "readAll" {
             0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
             0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
         };
-        var fbs = std.io.fixedBufferStream(&data);
-        var br = bitReader(T, fbs.reader());
+        var in: std.Io.Reader = .fixed(&data);
+        var br = bitReader(T, &in);
 
         switch (T) {
             u64 => try testing.expectEqual(@as(u64, 0x08_07_06_05_04_03_02_01), br.bits),
@@ -354,8 +349,8 @@ test "readFixedCode" {
     inline for ([_]type{ u64, u32 }) |T| {
         const fixed_codes = @import("huffman_encoder.zig").fixed_codes;
 
-        var fbs = std.io.fixedBufferStream(&fixed_codes);
-        var rdr = bitReader(T, fbs.reader());
+        var in: std.Io.Reader = .fixed(&fixed_codes);
+        var rdr = bitReader(T, &in);
 
         for (0..286) |c| {
             try testing.expectEqual(c, try rdr.readFixedCode());
@@ -369,8 +364,8 @@ test "u32 leaves no bits on u32 reads" {
         0xff, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
         0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
     };
-    var fbs = std.io.fixedBufferStream(&data);
-    var br = bitReader(u32, fbs.reader());
+    var in: std.Io.Reader = .fixed(&data);
+    var br = bitReader(u32, &in);
 
     _ = try br.read(u3);
     try testing.expectEqual(29, br.nbits);
@@ -396,8 +391,8 @@ test "u64 need fill after alignToByte" {
     };
 
     // without fill
-    var fbs = std.io.fixedBufferStream(&data);
-    var br = bitReader(u64, fbs.reader());
+    var in: std.Io.Reader = .fixed(&data);
+    var br = bitReader(u64, &in);
     _ = try br.read(u23);
     try testing.expectEqual(41, br.nbits);
     br.alignToByte();
@@ -408,8 +403,8 @@ test "u64 need fill after alignToByte" {
     try testing.expectEqual(32, br.nbits);
 
     // fill after align ensures all bits filled
-    fbs.reset();
-    br = bitReader(u64, fbs.reader());
+    in = .fixed(&data);
+    br = bitReader(u64, &in);
     _ = try br.read(u23);
     try testing.expectEqual(41, br.nbits);
     br.alignToByte();

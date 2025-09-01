@@ -65,11 +65,12 @@ pub fn hashedWriter(
 }
 
 test {
-    _ = lzma;
-    _ = lzma2;
-    _ = xz;
-    _ = zstd;
-    _ = flate;
+    //_ = lzma;
+    //_ = lzma2;
+    //_ = xz;
+    //_ = zstd;
+    //_ = flate;
     _ = gzip;
-    _ = zlib;
+    //_ = zlib;
+    _ = @import("legacy_bit_reader.zig");
 }

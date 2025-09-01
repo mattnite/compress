@@ -7,6 +7,7 @@ const testing = std.testing;
 const ArrayListManaged = std.array_list.Managed;
 
 const consts = @import("consts.zig").huffman;
+const legacy = @import("../legacy_bit_writer.zig");
 
 const LiteralNode = struct {
     literal: u16,
@@ -486,7 +487,7 @@ test bitReverse {
 test "fixedLiteralEncoder codes" {
     var al = ArrayListManaged(u8).init(testing.allocator);
     defer al.deinit();
-    var bw = std.io.bitWriter(.little, al.writer());
+    var bw = legacy.bitWriter(.little, al.writer());
 
     const f = fixedLiteralEncoder();
     for (f.codes) |c| {

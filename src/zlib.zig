@@ -82,7 +82,7 @@ test "should not overshoot" {
     var out: [128]u8 = undefined;
 
     // Decompress
-    var n = try dcp.reader().readAll(out[0..]);
+    var n = try dcp.reader().readSliceAll(out[0..]);
 
     // Expected decompressed data
     try std.testing.expectEqual(46, n);
@@ -94,7 +94,7 @@ test "should not overshoot" {
     try std.testing.expectEqual(0, dcp.unreadBytes());
 
     // 4 bytes after compressed chunk are available in reader.
-    n = try reader.readAll(out[0..]);
+    n = try reader.readSliceAll(out[0..]);
     try std.testing.expectEqual(n, 4);
     try std.testing.expectEqualSlices(u8, data[data.len - 4 .. data.len], out[0..n]);
 }
