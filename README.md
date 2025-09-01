@@ -5,7 +5,7 @@ new IO interface introduced in 0.15.1.
 
 ## Progress
 
-Currently the following areas are passing:
+Currently the following areas are passing tests:
 
 | Namespace | Compression Tests Passing | Decompression Tests Passing | 
 | --------- | ------------------------- | --------------------------- |
