@@ -2,6 +2,7 @@ const std = @import("std");
 const block = @import("xz/block.zig");
 const Allocator = std.mem.Allocator;
 const Crc32 = std.hash.Crc32;
+const legacy = @import("legacy_bit_reader.zig");
 
 pub const Check = enum(u4) {
     none = 0x00,
@@ -11,8 +12,8 @@ pub const Check = enum(u4) {
     _,
 };
 
-fn readStreamFlags(reader: anytype, check: *Check) !void {
-    var bit_reader = std.io.bitReader(.little, reader);
+fn readStreamFlags(reader: *std.Io.Reader, check: *Check) !void {
+    var bit_reader = legacy.bitReader(.little, reader);
 
     const reserved1 = try bit_reader.readBitsNoEof(u8, 8);
     if (reserved1 != 0)
@@ -25,7 +26,7 @@ fn readStreamFlags(reader: anytype, check: *Check) !void {
         return error.CorruptInput;
 }
 
-pub fn decompress(allocator: Allocator, reader: anytype) !Decompress(@TypeOf(reader)) {
+pub fn decompress(allocator: Allocator, reader: *std.Io.Reader) !Decompress(@TypeOf(reader)) {
     return Decompress(@TypeOf(reader)).init(allocator, reader);
 }
 

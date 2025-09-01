@@ -842,7 +842,7 @@ pub fn decodeBlockReader(
 
             var bytes_written: usize = 0;
             {
-                const size = try block_reader.readAll(sequence_buffer);
+                const size = try block_reader.readSliceAll(sequence_buffer);
                 var bit_stream: readers.ReverseBitReader = undefined;
                 try bit_stream.init(sequence_buffer[0..size]);
 

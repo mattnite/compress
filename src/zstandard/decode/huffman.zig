@@ -32,7 +32,7 @@ fn decodeFseHuffmanTree(
     };
     const accuracy_log = std.math.log2_int_ceil(usize, table_size);
 
-    const amount = try stream.reader().readAll(buffer);
+    const amount = try stream.reader().readSliceAll(buffer);
     var huff_bits: readers.ReverseBitReader = undefined;
     huff_bits.init(buffer[0..amount]) catch return error.MalformedHuffmanTree;
 

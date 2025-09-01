@@ -2,12 +2,12 @@ const std = @import("std");
 const math = std.math;
 const mem = std.mem;
 const Allocator = std.mem.Allocator;
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const ArrayList = std.ArrayList;
 
 /// An accumulating buffer for LZ sequences
 pub const LzAccumBuffer = struct {
     /// Buffer
-    buf: ArrayListUnmanaged(u8),
+    buf: ArrayList(u8),
 
     /// Buffer memory limit
     memlimit: usize,
@@ -31,7 +31,7 @@ pub const LzAccumBuffer = struct {
     }
 
     /// Reset the internal dictionary
-    pub fn reset(self: *Self, writer: anytype) !void {
+    pub fn reset(self: *Self, writer: *std.Io.Writer) !void {
         try writer.writeAll(self.buf.items);
         self.buf.clearRetainingCapacity();
         self.len = 0;
@@ -61,7 +61,7 @@ pub const LzAccumBuffer = struct {
         self: *Self,
         allocator: Allocator,
         lit: u8,
-        writer: anytype,
+        writer: *std.Io.Writer,
     ) !void {
         _ = writer;
         if (self.len >= self.memlimit) {
@@ -77,7 +77,7 @@ pub const LzAccumBuffer = struct {
         allocator: Allocator,
         len: usize,
         dist: usize,
-        writer: anytype,
+        writer: *std.Io.Writer,
     ) !void {
         _ = writer;
 
@@ -96,7 +96,7 @@ pub const LzAccumBuffer = struct {
         self.len += len;
     }
 
-    pub fn finish(self: *Self, writer: anytype) !void {
+    pub fn finish(self: *Self, writer: *std.Io.Writer) !void {
         try writer.writeAll(self.buf.items);
         self.buf.clearRetainingCapacity();
     }
@@ -110,7 +110,7 @@ pub const LzAccumBuffer = struct {
 /// A circular buffer for LZ sequences
 pub const LzCircularBuffer = struct {
     /// Circular buffer
-    buf: ArrayListUnmanaged(u8),
+    buf: ArrayList(u8),
 
     /// Length of the buffer
     dict_size: usize,
@@ -177,7 +177,7 @@ pub const LzCircularBuffer = struct {
         self: *Self,
         allocator: Allocator,
         lit: u8,
-        writer: anytype,
+        writer: *std.Io.Writer,
     ) !void {
         try self.set(allocator, self.cursor, lit);
         self.cursor += 1;
@@ -196,7 +196,7 @@ pub const LzCircularBuffer = struct {
         allocator: Allocator,
         len: usize,
         dist: usize,
-        writer: anytype,
+        writer: *std.Io.Writer,
     ) !void {
         if (dist > self.dict_size or dist > self.len) {
             return error.CorruptInput;
@@ -214,7 +214,7 @@ pub const LzCircularBuffer = struct {
         }
     }
 
-    pub fn finish(self: *Self, writer: anytype) !void {
+    pub fn finish(self: *Self, writer: *std.Io.Writer) !void {
         if (self.cursor > 0) {
             try writer.writeAll(self.buf.items[0..self.cursor]);
             self.cursor = 0;

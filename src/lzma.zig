@@ -2,19 +2,20 @@ const std = @import("std");
 const math = std.math;
 const mem = std.mem;
 const Allocator = std.mem.Allocator;
+const ArrayListManaged = std.array_list.Managed;
 
 pub const decode = @import("lzma/decode.zig");
 
 pub fn decompress(
     allocator: Allocator,
-    reader: anytype,
+    reader: *std.Io.Reader,
 ) !Decompress(@TypeOf(reader)) {
     return decompressWithOptions(allocator, reader, .{});
 }
 
 pub fn decompressWithOptions(
     allocator: Allocator,
-    reader: anytype,
+    reader: *std.Io.Reader,
     options: decode.Options,
 ) !Decompress(@TypeOf(reader)) {
     const params = try decode.Params.readHeader(reader, options);
@@ -34,7 +35,7 @@ pub fn Decompress(comptime ReaderType: type) type {
 
         allocator: Allocator,
         in_reader: ReaderType,
-        to_read: std.ArrayListUnmanaged(u8),
+        to_read: ArrayListManaged(u8),
 
         buffer: decode.lzbuffer.LzCircularBuffer,
         decoder: decode.rangecoder.RangeDecoder,

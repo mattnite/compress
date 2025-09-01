@@ -4,6 +4,7 @@ const assert = std.debug.assert;
 const testing = std.testing;
 const expect = testing.expect;
 const print = std.debug.print;
+const ArrayListManaged = std.array_list.Managed;
 
 const Token = @import("Token.zig");
 const consts = @import("consts.zig");
@@ -53,24 +54,20 @@ const LevelArgs = struct {
 };
 
 /// Compress plain data from reader into compressed stream written to writer.
-pub fn compress(comptime container: Container, reader: anytype, writer: anytype, options: Options) !void {
+pub fn compress(comptime container: Container, reader: *std.Io.Reader, writer: *std.Io.Writer, options: Options) !void {
     var c = try compressor(container, writer, options);
     try c.compress(reader);
     try c.finish();
 }
 
 /// Create compressor for writer type.
-pub fn compressor(comptime container: Container, writer: anytype, options: Options) !Compressor(
-    container,
-    @TypeOf(writer),
-) {
-    return try Compressor(container, @TypeOf(writer)).init(writer, options);
+pub fn compressor(comptime container: Container, writer: *std.Io.Writer, options: Options) !Compressor(container) {
+    return try Compressor(container).init(writer, options);
 }
 
 /// Compressor type.
-pub fn Compressor(comptime container: Container, comptime WriterType: type) type {
-    const TokenWriterType = BlockWriter(WriterType);
-    return Deflate(container, WriterType, TokenWriterType);
+pub fn Compressor(comptime container: Container) type {
+    return Deflate(container, BlockWriter);
 }
 
 /// Default compression algorithm. Has two steps: tokenization and token
@@ -114,17 +111,13 @@ pub fn Compressor(comptime container: Container, comptime WriterType: type) type
 ///
 ///
 /// Allocates statically ~400K (192K lookup, 128K tokens, 64K window).
-///
-/// Deflate function accepts BlockWriterType so we can change that in test to test
-/// just tokenization part.
-///
-fn Deflate(comptime container: Container, comptime WriterType: type, comptime BlockWriterType: type) type {
+fn Deflate(comptime container: Container, comptime TokenWriter: type) type {
     return struct {
         lookup: Lookup = .{},
         win: SlidingWindow = .{},
         tokens: Tokens = .{},
-        wrt: WriterType,
-        block_writer: BlockWriterType,
+        wrt: *std.Io.Writer,
+        block_writer: TokenWriter,
         level: LevelArgs,
         hasher: container.Hasher() = .{},
 
@@ -135,10 +128,10 @@ fn Deflate(comptime container: Container, comptime WriterType: type, comptime Bl
 
         const Self = @This();
 
-        pub fn init(wrt: WriterType, options: Options) !Self {
+        pub fn init(wrt: *std.Io.Writer, options: Options) !Self {
             const self = Self{
                 .wrt = wrt,
-                .block_writer = BlockWriterType.init(wrt),
+                .block_writer = TokenWriter.init(wrt),
                 .level = LevelArgs.get(options.level),
             };
             try container.writeHeader(self.wrt);
@@ -301,7 +294,7 @@ fn Deflate(comptime container: Container, comptime WriterType: type, comptime Bl
         /// It is up to the caller to call flush (if needed) or finish (required)
         /// when is need to output any pending data or complete stream.
         ///
-        pub fn compress(self: *Self, reader: anytype) !void {
+        pub fn compress(self: *Self, reader: *std.Io.Reader) !void {
             while (true) {
                 // Fill window from reader
                 const buf = self.win.writable();
@@ -310,7 +303,7 @@ fn Deflate(comptime container: Container, comptime WriterType: type, comptime Bl
                     self.slide();
                     continue;
                 }
-                const n = try reader.readAll(buf);
+                const n = try reader.readSliceShort(buf);
                 self.hasher.update(buf[0..n]);
                 self.win.written(n);
                 // Process window
@@ -346,28 +339,17 @@ fn Deflate(comptime container: Container, comptime WriterType: type, comptime Bl
             try container.writeFooter(&self.hasher, self.wrt);
         }
 
-        /// Use another writer while preserving history. Most probably flush
-        /// should be called on old writer before setting new.
-        pub fn setWriter(self: *Self, new_writer: WriterType) void {
-            self.block_writer.setWriter(new_writer);
-            self.wrt = new_writer;
-        }
-
         // Writer interface
 
-        pub const Writer = io.Writer(*Self, Error, write);
-        pub const Error = BlockWriterType.Error;
+        //pub const Writer = io.Writer(*Self, Error, write);
+        //pub const Error = BlockWriter.Error;
 
         /// Write `input` of uncompressed data.
         /// See compress.
         pub fn write(self: *Self, input: []const u8) !usize {
-            var fbs = io.fixedBufferStream(input);
-            try self.compress(fbs.reader());
+            var reader: std.Io.Reader = .fixed(input);
+            try self.compress(&reader);
             return input.len;
-        }
-
-        pub fn writer(self: *Self) Writer {
-            return .{ .context = self };
         }
     };
 }
@@ -399,18 +381,18 @@ const Tokens = struct {
 /// only performs Huffman entropy encoding. Results in faster compression, much
 /// less memory requirements during compression but bigger compressed sizes.
 pub const huffman = struct {
-    pub fn compress(comptime container: Container, reader: anytype, writer: anytype) !void {
+    pub fn compress(comptime container: Container, reader: *std.Io.Reader, writer: *std.Io.Writer) !void {
         var c = try huffman.compressor(container, writer);
         try c.compress(reader);
         try c.finish();
     }
 
-    pub fn Compressor(comptime container: Container, comptime WriterType: type) type {
-        return SimpleCompressor(.huffman, container, WriterType);
+    pub fn Compressor(comptime container: Container) type {
+        return SimpleCompressor(.huffman, container);
     }
 
-    pub fn compressor(comptime container: Container, writer: anytype) !huffman.Compressor(container, @TypeOf(writer)) {
-        return try huffman.Compressor(container, @TypeOf(writer)).init(writer);
+    pub fn compressor(comptime container: Container, writer: *std.Io.Writer) !huffman.Compressor(container) {
+        return try huffman.Compressor(container).init(writer);
     }
 };
 
@@ -418,18 +400,18 @@ pub const huffman = struct {
 /// store blocks. That adds 9 bytes of header for each block. Max stored block
 /// size is 64K. Block is emitted when flush is called on on finish.
 pub const store = struct {
-    pub fn compress(comptime container: Container, reader: anytype, writer: anytype) !void {
+    pub fn compress(comptime container: Container, reader: *std.Io.Reader, writer: *std.Io.Writer) !void {
         var c = try store.compressor(container, writer);
         try c.compress(reader);
         try c.finish();
     }
 
-    pub fn Compressor(comptime container: Container, comptime WriterType: type) type {
-        return SimpleCompressor(.store, container, WriterType);
+    pub fn Compressor(comptime container: Container) type {
+        return SimpleCompressor(.store, container);
     }
 
-    pub fn compressor(comptime container: Container, writer: anytype) !store.Compressor(container, @TypeOf(writer)) {
-        return try store.Compressor(container, @TypeOf(writer)).init(writer);
+    pub fn compressor(comptime container: Container, writer: *std.Io.Writer) !store.Compressor(container) {
+        return try store.Compressor(container).init(writer);
     }
 };
 
@@ -441,31 +423,29 @@ const SimpleCompressorKind = enum {
 fn simpleCompressor(
     comptime kind: SimpleCompressorKind,
     comptime container: Container,
-    writer: anytype,
-) !SimpleCompressor(kind, container, @TypeOf(writer)) {
-    return try SimpleCompressor(kind, container, @TypeOf(writer)).init(writer);
+    writer: *std.Io.Writer,
+) !SimpleCompressor(kind, container) {
+    return try SimpleCompressor(kind, container).init(writer);
 }
 
 fn SimpleCompressor(
     comptime kind: SimpleCompressorKind,
     comptime container: Container,
-    comptime WriterType: type,
 ) type {
-    const BlockWriterType = BlockWriter(WriterType);
     return struct {
         buffer: [65535]u8 = undefined, // because store blocks are limited to 65535 bytes
         wp: usize = 0,
 
-        wrt: WriterType,
-        block_writer: BlockWriterType,
+        wrt: *std.Io.Writer,
+        block_writer: BlockWriter,
         hasher: container.Hasher() = .{},
 
         const Self = @This();
 
-        pub fn init(wrt: WriterType) !Self {
+        pub fn init(wrt: *std.Io.Writer) !Self {
             const self = Self{
                 .wrt = wrt,
-                .block_writer = BlockWriterType.init(wrt),
+                .block_writer = BlockWriter.init(wrt),
             };
             try container.writeHeader(self.wrt);
             return self;
@@ -495,7 +475,7 @@ fn SimpleCompressor(
         // Writes all data from the input reader of uncompressed data.
         // It is up to the caller to call flush or finish if there is need to
         // output compressed blocks.
-        pub fn compress(self: *Self, reader: anytype) !void {
+        pub fn compress(self: *Self, reader: *std.Io.Reader) !void {
             while (true) {
                 // read from rdr into buffer
                 const buf = self.buffer[self.wp..];
@@ -503,7 +483,7 @@ fn SimpleCompressor(
                     try self.flushBuffer(false);
                     continue;
                 }
-                const n = try reader.readAll(buf);
+                const n = try reader.readSliceShort(buf);
                 self.hasher.update(buf[0..n]);
                 self.wp += n;
                 if (n < buf.len) break; // no more data in reader
@@ -513,7 +493,7 @@ fn SimpleCompressor(
         // Writer interface
 
         pub const Writer = io.Writer(*Self, Error, write);
-        pub const Error = BlockWriterType.Error;
+        pub const Error = BlockWriter.Error;
 
         // Write `input` of uncompressed data.
         pub fn write(self: *Self, input: []const u8) !usize {
@@ -553,10 +533,10 @@ test "tokenization" {
 
     for (cases) |c| {
         inline for (Container.list) |container| { // for each wrapping
+            var buf: std.Io.Writer.Allocating = .init(testing.allocator);
+            defer buf.deinit();
 
-            var cw = io.countingWriter(io.null_writer);
-            const cww = cw.writer();
-            var df = try Deflate(container, @TypeOf(cww), TestTokenWriter).init(cww, .{});
+            var df = try Deflate(container, TestTokenWriter).init(&buf.writer, .{});
 
             _ = try df.write(c.data);
             try df.flush();
@@ -565,9 +545,9 @@ test "tokenization" {
             try expect(df.block_writer.pos == c.tokens.len); // number of tokens written
             try testing.expectEqualSlices(Token, df.block_writer.get(), c.tokens); // tokens match
 
-            try testing.expectEqual(container.headerSize(), cw.bytes_written);
+            try testing.expectEqual(container.headerSize(), buf.writer.end);
             try df.finish();
-            try testing.expectEqual(container.size(), cw.bytes_written);
+            try testing.expectEqual(container.size(), buf.writer.end);
         }
     }
 }
@@ -579,7 +559,7 @@ const TestTokenWriter = struct {
     pos: usize = 0,
     actual: [128]Token = undefined,
 
-    pub fn init(_: anytype) Self {
+    pub fn init(_: *std.Io.Writer) Self {
         return .{};
     }
     pub fn write(self: *Self, tokens: []const Token, _: bool, _: ?[]const u8) !void {
@@ -643,23 +623,20 @@ test "file tokenization" {
         const data = case.data;
 
         for (levels, 0..) |level, i| { // for each compression level
-            var original = io.fixedBufferStream(data);
+            var original: std.Io.Reader = .fixed(data);
 
             // buffer for decompressed data
-            var al = std.ArrayList(u8).init(testing.allocator);
-            defer al.deinit();
-            const writer = al.writer();
+            var buf: std.Io.Writer.Allocating = .init(testing.allocator);
+            defer buf.deinit();
 
             // create compressor
-            const WriterType = @TypeOf(writer);
-            const TokenWriter = TokenDecoder(@TypeOf(writer));
-            var cmp = try Deflate(.raw, WriterType, TokenWriter).init(writer, .{ .level = level });
+            var cmp = try Deflate(.raw, TokenDecoder).init(&buf.writer, .{ .level = level });
 
             // Stream uncompressed `original` data to the compressor. It will
             // produce tokens list and pass that list to the TokenDecoder. This
             // TokenDecoder uses CircularBuffer from inflate to convert list of
             // tokens back to the uncompressed stream.
-            try cmp.compress(original.reader());
+            try cmp.compress(&original);
             try cmp.flush();
             const expected_count = case.tokens_count[i];
             const actual = cmp.block_writer.tokens_count;
@@ -669,50 +646,48 @@ test "file tokenization" {
                 try testing.expectEqual(expected_count, actual);
             }
 
-            try testing.expectEqual(data.len, al.items.len);
-            try testing.expectEqualSlices(u8, data, al.items);
+            try testing.expectEqual(data.len, buf.written().len);
+            try testing.expectEqualSlices(u8, data, buf.written());
         }
     }
 }
 
-fn TokenDecoder(comptime WriterType: type) type {
-    return struct {
-        const CircularBuffer = @import("CircularBuffer.zig");
-        hist: CircularBuffer = .{},
-        wrt: WriterType,
-        tokens_count: usize = 0,
+const TokenDecoder = struct {
+    const CircularBuffer = @import("CircularBuffer.zig");
+    hist: CircularBuffer = .{},
+    wrt: *std.Io.Writer,
+    tokens_count: usize = 0,
 
-        const Self = @This();
+    const Self = @This();
 
-        pub fn init(wrt: WriterType) Self {
-            return .{ .wrt = wrt };
-        }
+    pub fn init(wrt: *std.Io.Writer) Self {
+        return .{ .wrt = wrt };
+    }
 
-        pub fn write(self: *Self, tokens: []const Token, _: bool, _: ?[]const u8) !void {
-            self.tokens_count += tokens.len;
-            for (tokens) |t| {
-                switch (t.kind) {
-                    .literal => self.hist.write(t.literal()),
-                    .match => try self.hist.writeMatch(t.length(), t.distance()),
-                }
-                if (self.hist.free() < 285) try self.flushWin();
+    pub fn write(self: *Self, tokens: []const Token, _: bool, _: ?[]const u8) !void {
+        self.tokens_count += tokens.len;
+        for (tokens) |t| {
+            switch (t.kind) {
+                .literal => self.hist.write(t.literal()),
+                .match => try self.hist.writeMatch(t.length(), t.distance()),
             }
-            try self.flushWin();
+            if (self.hist.free() < 285) try self.flushWin();
         }
+        try self.flushWin();
+    }
 
-        pub fn storedBlock(_: *Self, _: []const u8, _: bool) !void {}
+    pub fn storedBlock(_: *Self, _: []const u8, _: bool) !void {}
 
-        fn flushWin(self: *Self) !void {
-            while (true) {
-                const buf = self.hist.read();
-                if (buf.len == 0) break;
-                try self.wrt.writeAll(buf);
-            }
+    fn flushWin(self: *Self) !void {
+        while (true) {
+            const buf = self.hist.read();
+            if (buf.len == 0) break;
+            try self.wrt.writeAll(buf);
         }
+    }
 
-        pub fn flush(_: *Self) !void {}
-    };
-}
+    pub fn flush(_: *Self) !void {}
+};
 
 test "store simple compressor" {
     const data = "Hello world!";
@@ -724,21 +699,21 @@ test "store simple compressor" {
         //0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x77, 0x6f, 0x72, 0x6c, 0x64, 0x21,
     };
 
-    var fbs = std.io.fixedBufferStream(data);
-    var al = std.ArrayList(u8).init(testing.allocator);
-    defer al.deinit();
+    var in: std.Io.Reader = .fixed(data);
+    var out: std.Io.Writer.Allocating = .init(testing.allocator);
+    defer out.deinit();
 
-    var cmp = try store.compressor(.raw, al.writer());
-    try cmp.compress(fbs.reader());
+    var cmp = try store.compressor(.raw, &out.writer);
+    try cmp.compress(&in);
     try cmp.finish();
-    try testing.expectEqualSlices(u8, &expected, al.items);
+    try testing.expectEqualSlices(u8, &expected, out.written());
 
-    fbs.reset();
-    try al.resize(0);
+    in = .fixed(data);
+    _ = out.writer.consumeAll();
 
     // huffman only compresoor will also emit store block for this small sample
-    var hc = try huffman.compressor(.raw, al.writer());
-    try hc.compress(fbs.reader());
+    var hc = try huffman.compressor(.raw, &out.writer);
+    try hc.compress(&in);
     try hc.finish();
-    try testing.expectEqualSlices(u8, &expected, al.items);
+    try testing.expectEqualSlices(u8, &expected, out.written());
 }

@@ -46,7 +46,7 @@ pub const Params = struct {
     dict_size: u32,
     unpacked_size: ?u64,
 
-    pub fn readHeader(reader: anytype, options: Options) !Params {
+    pub fn readHeader(reader: *std.Io.Reader, options: Options) !Params {
         var props = try reader.readByte();
         if (props >= 225) {
             return error.CorruptInput;
@@ -161,8 +161,8 @@ pub const DecoderState = struct {
     fn processNextInner(
         self: *DecoderState,
         allocator: Allocator,
-        reader: anytype,
-        writer: anytype,
+        reader: *std.Io.Reader,
+        writer: *std.Io.Writer,
         buffer: anytype,
         decoder: *RangeDecoder,
         update: bool,
@@ -265,8 +265,8 @@ pub const DecoderState = struct {
     fn processNext(
         self: *DecoderState,
         allocator: Allocator,
-        reader: anytype,
-        writer: anytype,
+        reader: *std.Io.Reader,
+        writer: *std.Io.Writer,
         buffer: anytype,
         decoder: *RangeDecoder,
     ) !ProcessingStatus {
@@ -276,8 +276,8 @@ pub const DecoderState = struct {
     pub fn process(
         self: *DecoderState,
         allocator: Allocator,
-        reader: anytype,
-        writer: anytype,
+        reader: *std.Io.Reader,
+        writer: *std.Io.Writer,
         buffer: anytype,
         decoder: *RangeDecoder,
     ) !ProcessingStatus {
@@ -307,7 +307,7 @@ pub const DecoderState = struct {
 
     fn decodeLiteral(
         self: *DecoderState,
-        reader: anytype,
+        reader: *std.Io.Reader,
         buffer: anytype,
         decoder: *RangeDecoder,
         update: bool,
@@ -347,7 +347,7 @@ pub const DecoderState = struct {
 
     fn decodeDistance(
         self: *DecoderState,
-        reader: anytype,
+        reader: *std.Io.Reader,
         decoder: *RangeDecoder,
         length: usize,
         update: bool,

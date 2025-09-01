@@ -1,6 +1,7 @@
 const std = @import("std");
 const assert = std.debug.assert;
 const testing = std.testing;
+const ArrayListManaged = std.array_list.Managed;
 
 const hfd = @import("huffman_decoder.zig");
 const BitReader = @import("bit_reader.zig").BitReader;
@@ -11,22 +12,22 @@ const codegen_order = @import("consts.zig").huffman.codegen_order;
 
 /// Decompresses deflate bit stream `reader` and writes uncompressed data to the
 /// `writer` stream.
-pub fn decompress(comptime container: Container, reader: anytype, writer: anytype) !void {
+pub fn decompress(comptime container: Container, reader: *std.Io.Reader, writer: *std.Io.Writer) !void {
     var d = decompressor(container, reader);
     try d.decompress(writer);
 }
 
 /// Inflate decompressor for the reader type.
-pub fn decompressor(comptime container: Container, reader: anytype) Decompressor(container, @TypeOf(reader)) {
-    return Decompressor(container, @TypeOf(reader)).init(reader);
+pub fn decompressor(comptime container: Container, reader: *std.Io.Reader) Decompressor(container) {
+    return Decompressor(container).init(reader);
 }
 
-pub fn Decompressor(comptime container: Container, comptime ReaderType: type) type {
+pub fn Decompressor(comptime container: Container) type {
     // zlib has 4 bytes footer, lookahead of 4 bytes ensures that we will not overshoot.
     // gzip has 8 bytes footer so we will not overshoot even with 8 bytes of lookahead.
     // For raw deflate there is always possibility of overshot so we use 8 bytes lookahead.
     const lookahead: type = if (container == .zlib) u32 else u64;
-    return Inflate(container, lookahead, ReaderType);
+    return Inflate(container, lookahead);
 }
 
 /// Inflate decompresses deflate bit stream. Reads compressed data from reader
@@ -48,15 +49,15 @@ pub fn Decompressor(comptime container: Container, comptime ReaderType: type) ty
 ///   * 64K for history (CircularBuffer)
 ///   * ~10K huffman decoders (Literal and DistanceDecoder)
 ///
-pub fn Inflate(comptime container: Container, comptime LookaheadType: type, comptime ReaderType: type) type {
+pub fn Inflate(comptime container: Container, comptime LookaheadType: type) type {
     assert(LookaheadType == u32 or LookaheadType == u64);
-    const BitReaderType = BitReader(LookaheadType, ReaderType);
+    const BitReaderType = BitReader(LookaheadType);
 
     return struct {
         //const BitReaderType = BitReader(ReaderType);
         const F = BitReaderType.flag;
 
-        bits: BitReaderType = .{},
+        bits: BitReaderType,
         hist: CircularBuffer = .{},
         // Hashes, produces checkusm, of uncompressed data for gzip/zlib footer.
         hasher: container.Hasher() = .{},
@@ -88,7 +89,7 @@ pub fn Inflate(comptime container: Container, comptime LookaheadType: type, comp
             InvalidDynamicBlockHeader,
         };
 
-        pub fn init(rt: ReaderType) Self {
+        pub fn init(rt: *std.Io.Reader) Self {
             return .{ .bits = BitReaderType.init(rt) };
         }
 
@@ -106,7 +107,7 @@ pub fn Inflate(comptime container: Container, comptime LookaheadType: type, comp
 
             while (len > 0) {
                 const buf = self.hist.getWritable(len);
-                try self.bits.readAll(buf);
+                try self.bits.readSliceAll(buf);
                 len -= @intCast(buf.len);
             }
             return true;
@@ -260,7 +261,8 @@ pub fn Inflate(comptime container: Container, comptime LookaheadType: type, comp
         fn step(self: *Self) !void {
             switch (self.state) {
                 .protocol_header => {
-                    try container.parseHeader(&self.bits);
+                    // FIXME: undo this comment
+                    //try container.parseHeader(&self.bits);
                     self.state = .block_header;
                 },
                 .block_header => {
@@ -288,17 +290,9 @@ pub fn Inflate(comptime container: Container, comptime LookaheadType: type, comp
             }
         }
 
-        /// Replaces the inner reader with new reader.
-        pub fn setReader(self: *Self, new_reader: ReaderType) void {
-            self.bits.forward_reader = new_reader;
-            if (self.state == .end or self.state == .protocol_footer) {
-                self.state = .protocol_header;
-            }
-        }
-
         // Reads all compressed data from the internal reader and outputs plain
         // (uncompressed) data to the provided writer.
-        pub fn decompress(self: *Self, writer: anytype) !void {
+        pub fn decompress(self: *Self, writer: *std.Io.Writer) !void {
             while (try self.next()) |buf| {
                 try writer.writeAll(buf);
             }
@@ -392,7 +386,7 @@ test "decompress" {
     };
     for (cases) |c| {
         var fb = std.io.fixedBufferStream(c.in);
-        var al = std.ArrayList(u8).init(testing.allocator);
+        var al = ArrayListManaged(u8).init(testing.allocator);
         defer al.deinit();
 
         try decompress(.raw, fb.reader(), al.writer());
@@ -449,7 +443,7 @@ test "gzip decompress" {
     };
     for (cases) |c| {
         var fb = std.io.fixedBufferStream(c.in);
-        var al = std.ArrayList(u8).init(testing.allocator);
+        var al = ArrayListManaged(u8).init(testing.allocator);
         defer al.deinit();
 
         try decompress(.gzip, fb.reader(), al.writer());
@@ -475,7 +469,7 @@ test "zlib decompress" {
     };
     for (cases) |c| {
         var fb = std.io.fixedBufferStream(c.in);
-        var al = std.ArrayList(u8).init(testing.allocator);
+        var al = ArrayListManaged(u8).init(testing.allocator);
         defer al.deinit();
 
         try decompress(.zlib, fb.reader(), al.writer());
@@ -533,7 +527,7 @@ test "fuzzing tests" {
 
     inline for (cases, 0..) |c, case_no| {
         var in = std.io.fixedBufferStream(@embedFile("testdata/fuzz/" ++ c.input ++ ".input"));
-        var out = std.ArrayList(u8).init(testing.allocator);
+        var out = ArrayListManaged(u8).init(testing.allocator);
         defer out.deinit();
         errdefer std.debug.print("test case failed {}\n", .{case_no});
 
@@ -551,7 +545,7 @@ test "bug 18966" {
     const expect = @embedFile("testdata/fuzz/bug_18966.expect");
 
     var in = std.io.fixedBufferStream(input);
-    var out = std.ArrayList(u8).init(testing.allocator);
+    var out = ArrayListManaged(u8).init(testing.allocator);
     defer out.deinit();
 
     try decompress(.gzip, in.reader(), out.writer());

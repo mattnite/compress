@@ -32,8 +32,8 @@ pub const Decoder = struct {
     pub fn decompress(
         self: *Decoder,
         allocator: Allocator,
-        reader: anytype,
-        writer: anytype,
+        reader: *std.Io.Reader,
+        writer: *std.Io.Writer,
     ) !void {
         var accum = LzAccumBuffer.init(std.math.maxInt(usize));
         defer accum.deinit(allocator);
@@ -55,8 +55,8 @@ pub const Decoder = struct {
     fn parseLzma(
         self: *Decoder,
         allocator: Allocator,
-        reader: anytype,
-        writer: anytype,
+        reader: *std.Io.Reader,
+        writer: *std.Io.Writer,
         accum: *LzAccumBuffer,
         status: u8,
     ) !void {
@@ -150,8 +150,8 @@ pub const Decoder = struct {
 
     fn parseUncompressed(
         allocator: Allocator,
-        reader: anytype,
-        writer: anytype,
+        reader: *std.Io.Reader,
+        writer: *std.Io.Writer,
         accum: *LzAccumBuffer,
         reset_dict: bool,
     ) !void {

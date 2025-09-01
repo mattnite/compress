@@ -1,8 +1,9 @@
+const std = @import("std");
 const deflate = @import("flate/deflate.zig");
 const inflate = @import("flate/inflate.zig");
 
 /// Decompress compressed data from reader and write plain data to the writer.
-pub fn decompress(reader: anytype, writer: anytype) !void {
+pub fn decompress(reader: *std.Io.Reader, writer: *std.Io.Writer) !void {
     try inflate.decompress(.zlib, reader, writer);
 }
 
@@ -12,7 +13,7 @@ pub fn Decompressor(comptime ReaderType: type) type {
 }
 
 /// Create Decompressor which will read compressed data from reader.
-pub fn decompressor(reader: anytype) Decompressor(@TypeOf(reader)) {
+pub fn decompressor(reader: *std.Io.Reader) Decompressor(@TypeOf(reader)) {
     return inflate.decompressor(.zlib, reader);
 }
 
@@ -20,7 +21,7 @@ pub fn decompressor(reader: anytype) Decompressor(@TypeOf(reader)) {
 pub const Options = deflate.Options;
 
 /// Compress plain data from reader and write compressed data to the writer.
-pub fn compress(reader: anytype, writer: anytype, options: Options) !void {
+pub fn compress(reader: *std.Io.Reader, writer: *std.Io.Writer, options: Options) !void {
     try deflate.compress(.zlib, reader, writer, options);
 }
 
@@ -30,14 +31,14 @@ pub fn Compressor(comptime WriterType: type) type {
 }
 
 /// Create Compressor which outputs compressed data to the writer.
-pub fn compressor(writer: anytype, options: Options) !Compressor(@TypeOf(writer)) {
+pub fn compressor(writer: *std.Io.Writer, options: Options) !Compressor(@TypeOf(writer)) {
     return try deflate.compressor(.zlib, writer, options);
 }
 
 /// Huffman only compression. Without Lempel-Ziv match searching. Faster
 /// compression, less memory requirements but bigger compressed sizes.
 pub const huffman = struct {
-    pub fn compress(reader: anytype, writer: anytype) !void {
+    pub fn compress(reader: *std.Io.Reader, writer: *std.Io.Writer) !void {
         try deflate.huffman.compress(.zlib, reader, writer);
     }
 
@@ -45,14 +46,14 @@ pub const huffman = struct {
         return deflate.huffman.Compressor(.zlib, WriterType);
     }
 
-    pub fn compressor(writer: anytype) !huffman.Compressor(@TypeOf(writer)) {
+    pub fn compressor(writer: *std.Io.Writer) !huffman.Compressor(@TypeOf(writer)) {
         return deflate.huffman.compressor(.zlib, writer);
     }
 };
 
 // No compression store only. Compressed size is slightly bigger than plain.
 pub const store = struct {
-    pub fn compress(reader: anytype, writer: anytype) !void {
+    pub fn compress(reader: *std.Io.Reader, writer: *std.Io.Writer) !void {
         try deflate.store.compress(.zlib, reader, writer);
     }
 
@@ -60,14 +61,12 @@ pub const store = struct {
         return deflate.store.Compressor(.zlib, WriterType);
     }
 
-    pub fn compressor(writer: anytype) !store.Compressor(@TypeOf(writer)) {
+    pub fn compressor(writer: *std.Io.Writer) !store.Compressor(@TypeOf(writer)) {
         return deflate.store.compressor(.zlib, writer);
     }
 };
 
 test "should not overshoot" {
-    const std = @import("std");
-
     // Compressed zlib data with extra 4 bytes at the end.
     const data = [_]u8{
         0x78, 0x9c, 0x73, 0xce, 0x2f, 0xa8, 0x2c, 0xca, 0x4c, 0xcf, 0x28, 0x51, 0x08, 0xcf, 0xcc, 0xc9,
@@ -83,7 +82,7 @@ test "should not overshoot" {
     var out: [128]u8 = undefined;
 
     // Decompress
-    var n = try dcp.reader().readAll(out[0..]);
+    var n = try dcp.reader().readSliceAll(out[0..]);
 
     // Expected decompressed data
     try std.testing.expectEqual(46, n);
@@ -95,7 +94,7 @@ test "should not overshoot" {
     try std.testing.expectEqual(0, dcp.unreadBytes());
 
     // 4 bytes after compressed chunk are available in reader.
-    n = try reader.readAll(out[0..]);
+    n = try reader.readSliceAll(out[0..]);
     try std.testing.expectEqual(n, 4);
     try std.testing.expectEqualSlices(u8, data[data.len - 4 .. data.len], out[0..n]);
 }

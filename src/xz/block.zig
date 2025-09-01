@@ -1,7 +1,7 @@
 const std = @import("std");
 const lzma2 = std.compress.lzma2;
 const Allocator = std.mem.Allocator;
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const ArrayList = std.ArrayList;
 const Crc32 = std.hash.Crc32;
 const Crc64 = std.hash.crc.Crc64Xz;
 const Sha256 = std.crypto.hash.sha2.Sha256;
@@ -16,7 +16,7 @@ const DecodeError = error{
     Overflow,
 };
 
-pub fn decoder(allocator: Allocator, reader: anytype, check: xz.Check) !Decoder(@TypeOf(reader)) {
+pub fn decoder(allocator: Allocator, reader: *std.Io.Reader, check: xz.Check) !Decoder(@TypeOf(reader)) {
     return Decoder(@TypeOf(reader)).init(allocator, reader, check);
 }
 
@@ -33,7 +33,7 @@ pub fn Decoder(comptime ReaderType: type) type {
         inner_reader: ReaderType,
         check: xz.Check,
         err: ?Error,
-        to_read: ArrayListUnmanaged(u8),
+        to_read: ArrayList(u8),
         read_pos: usize,
         block_count: usize,
 

@@ -202,7 +202,7 @@ pub fn Decompressor(comptime ReaderType: type) type {
     };
 }
 
-pub fn decompressor(reader: anytype, options: DecompressorOptions) Decompressor(@TypeOf(reader)) {
+pub fn decompressor(reader: *std.Io.Reader, options: DecompressorOptions) Decompressor(@TypeOf(reader)) {
     return Decompressor(@TypeOf(reader)).init(reader, options);
 }
 
