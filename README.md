@@ -8,7 +8,7 @@ new IO interface introduced in 0.15.1.
 Currently the following areas are passing:
 
 | Namespace | Compression Tests Passing | Decompression Tests Passing | 
-| ========= | ========================= | =========================== |
+| --------- | ------------------------- | --------------------------- |
 | gzip      | Yes                       | No                          | 
 | lzma      | No                        | No                          | 
 | lzma2     | No                        | No                          | 
